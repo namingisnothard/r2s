@@ -6,6 +6,7 @@ export type PipelineModule = {
   role: string;
   href: string;
   capability?: string;
+  contributesTo?: ('Geometry' | 'Appearance' | 'Physics' | 'Retargeting' | 'Policy')[];
 };
 
 const corePipelineModules: Record<string, PipelineModule[]> = {
@@ -122,7 +123,7 @@ const corePipelineModules: Record<string, PipelineModule[]> = {
   ],
   'Agentic Real2Sim': [
     { name:'SAM 3', capability:'SAM 3', phase:'Segment', role:'Open-vocabulary object discovery, masks, and tracking.', href:'https://arxiv.org/html/2607.19190#S3.SS2' },
-    { name:'SAM 3D', capability:'SAM 3D', phase:'Geometry', role:'Recovers object meshes from accepted keyframe evidence.', href:'https://arxiv.org/html/2607.19190#S3.SS2' },
+    { name:'SAM 3D Objects', capability:'SAM 3D Objects', phase:'Geometry', role:'Recovers object meshes from accepted keyframe evidence.', href:'https://arxiv.org/html/2607.19190#S3.SS2' },
     { name:'FoundationStereo', capability:'FoundationStereo', phase:'Geometry', role:'Stereo depth for metric scaling and scene preparation.', href:'https://arxiv.org/html/2607.19190#S2.SS4' },
     { name:'FoundationPose', capability:'FoundationPose', phase:'Pose', role:'Tracks novel-object 6-DoF trajectories.', href:'https://arxiv.org/html/2607.19190#S3.SS2' },
     { name:'VLM physical-prior agent', phase:'Physics', role:'Infers material class, mass hints, and contact-relevant attributes.', href:'https://arxiv.org/html/2607.19190#S3.SS1' },
@@ -132,7 +133,7 @@ const corePipelineModules: Record<string, PipelineModule[]> = {
   ],
   RoboSnap: [
     { name:'SAM 3', capability:'SAM 3', phase:'Segment', role:'Parses the interaction region into object instances.', href:'https://arxiv.org/html/2607.06699#S3.SS1' },
-    { name:'SAM 3D', capability:'SAM 3D', phase:'Generate', role:'Produces textured foreground meshes with initial pose and scale.', href:'https://arxiv.org/html/2607.06699#S3.SS1' },
+    { name:'SAM 3D Objects', capability:'SAM 3D Objects', phase:'Generate', role:'Produces textured foreground meshes with initial pose and scale.', href:'https://arxiv.org/html/2607.06699#S3.SS1' },
     { name:'VGGT', capability:'VGGT', phase:'Geometry', role:'Predicts camera geometry and a dense point map from the input image.', href:'https://arxiv.org/html/2607.06699#S3.SS1' },
     { name:'Mask-guided ICP', phase:'Pose', role:'Registers generated meshes to high-confidence foreground points.', href:'https://arxiv.org/html/2607.06699#S3.SS1' },
     { name:'3D Gaussian Splatting', capability:'3D Gaussian Splatting', phase:'Appearance', role:'Preserves the re-renderable visual background.', href:'https://robosnap.github.io/' },
@@ -461,7 +462,7 @@ const corePipelineModules: Record<string, PipelineModule[]> = {
     { name:'Monocular iPhone interaction video', phase:'Capture', role:'Provides one task example with body and object interaction evidence.', href:'https://arxiv.org/html/2602.02473v1#S3' },
     { name:'GVHMR', phase:'Body recon', role:'Recovers world-space SMPL root and joint motion from the human video.', href:'https://arxiv.org/html/2602.02473v1#S3.SS1' },
     { name:'GMR keypoints + scaling + IK', capability:'GMR', phase:'Retarget', role:'Maps human motion to the target humanoid joint trajectory.', href:'https://arxiv.org/html/2602.02473v1#S3.SS1' },
-    { name:'SAM 3D object asset', capability:'SAM 3D', phase:'Object', role:'Recovers the interacting object mesh and initial anchor-relative pose.', href:'https://arxiv.org/html/2602.02473v1#S3.SS2' },
+    { name:'SAM 3D object asset', capability:'SAM 3D Objects', phase:'Object', role:'Recovers the interacting object mesh and initial anchor-relative pose.', href:'https://arxiv.org/html/2602.02473v1#S3.SS2' },
     { name:'Contact anchors + force closure', capability:'HumanX', phase:'Physics', role:'Preserves cross-embodiment interaction semantics and repairs contact poses.', href:'https://arxiv.org/html/2602.02473v1#S3.SS2' },
     { name:'Isaac Gym non-contact rollout', phase:'Dynamics', role:'Synthesizes plausible pre- and post-contact object trajectories.', href:'https://arxiv.org/html/2602.02473v1#S3.SS2' },
     { name:'XGen object / trajectory augmentation', phase:'Augment', role:'Expands each demonstration across object states and geometry.', href:'https://arxiv.org/html/2602.02473v1#S3.SS3' },

@@ -71,7 +71,7 @@ const stages: BreakdownStage[] = [
       { name:'Renderable object asset', format:'.GLB · .OBJ · .USD', purpose:'Editable mesh, hierarchy, visual topology' },
       { name:'Materials / textures', format:'PNG/EXR · KTX2 · MaterialX', purpose:'Albedo, roughness, metallic, normals' },
     ],
-    tools:['GPT Image 2','SAM 3D','TRELLIS.2','Hunyuan3D 2.1','Material Anything','NVIDIA 3DGRUT'],
+    tools:['GPT Image 2','SAM 3D Objects','TRELLIS.2','Hunyuan3D 2.1','Material Anything','NVIDIA 3DGRUT'],
     pipelines:[{name:'Lucida',href:'https://lucida-r2s.github.io/'},{name:'RoboSnap',href:'https://robosnap.github.io/'},{name:'SimFoundry',href:'https://research.nvidia.com/labs/gear/simfoundry/'},{name:'WorldComposer',href:'https://stubborn111.github.io/WorldComposer/'}],
     gate:'Separate observed from generated content. Inspect topology, scale, texture bake, transparency, hidden surfaces, licenses, and editability.',
   },

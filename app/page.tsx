@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { capabilities, capabilityEvidence, capabilityStages, pipelines, pipelineSceneReports, type Domain, type Stage } from './data';
-import { pipelineModules } from './pipeline-modules';
+import { pipelineModules, type PipelineModule } from './pipeline-modules';
+import { institutionFor } from './pipeline-institutions';
+import { datasetProfileFor } from './pipeline-datasets';
 import { publicationVenues } from './publication-venues';
+import { capabilityDetailFor } from './capability-details';
 import { SiteFooter, SiteHeader } from './site-chrome';
 
 const stages: Stage[] = ['Geometry', 'Appearance', 'Physics', 'Retargeting', 'Policy'];
@@ -52,6 +55,118 @@ const real2simRelevance = (item: (typeof pipelines)[number]) => {
   const components = stages.map((candidate) => ({ label:candidate, covered:item.stages.includes(candidate) }));
   const score = components.filter((component) => component.covered).length;
   return { components, score, band:score >= 4 ? 'HIGH' : score >= 2 ? 'MEDIUM' : 'LOW' };
+};
+
+const stageModulePatterns: Record<Stage, RegExp> = {
+  Geometry:/calibr|segment|mask|depth|pose|track|geometry|recon|recover|mesh|point cloud|scene graph|slam|sfm|3d|4d/i,
+  Appearance:/appearance|render|image|video|texture|inpaint|gaussian|splat|diffusion|generate|compose|novel.view|visual/i,
+  Physics:/physics|simulat|dynamic|contact|collision|force|material|mass|friction|system.id|identify|randomization|rollout|world.model/i,
+  Retargeting:/retarget|kinematic|\bik\b|mapping|correspond|align|transfer|robot.motion|action.interface|optimization|teleop/i,
+  Policy:/policy|learn|train|\brl\b|reinforcement|imitation|behavior|deploy|planner|planning|control|vla|ppo|adapt/i,
+};
+
+const capabilityCategory = new Map(capabilities.map((capability) => [capability.name, capability.stage]));
+const capabilityStageDefaults: Record<string, Stage[]> = {
+  'Image generation':['Appearance'],
+  '3D generation':['Geometry'],
+  Geometry:['Geometry'],
+  Appearance:['Appearance'],
+  Segmentation:['Geometry'],
+  'Hand recon':['Geometry'],
+  'Body recon':['Geometry'],
+  Pose:['Geometry'],
+  'Scene graph / structured world state':['Geometry'],
+  'Kinematics / IK':['Retargeting'],
+  Physics:['Physics'],
+  Retargeting:['Retargeting'],
+  'Policy learning':['Policy'],
+};
+
+// Exact contextual exceptions for stack tools whose fine-grained category can
+// contribute to more than one of the five pipeline stages.
+const capabilityStageOverrides: Record<string, Stage[]> = {
+  'Agentic Real2Sim::SAM 3D Objects':['Geometry', 'Appearance'],
+  'Agentic Real2Sim::Humanoid BFM adapter':['Retargeting'],
+  'Ego2Robot::Ego corpus / raw video':['Retargeting'],
+  'RLDX-1::Bare-hand + object capture':['Geometry', 'Retargeting'],
+  'World Labs Atlas::Omni diffusion transformer':['Geometry', 'Appearance', 'Physics'],
+  'World Labs R2S2R::Controllable world variants':['Appearance', 'Physics'],
+  'Masked Visual Actions::Masked entity motion':['Appearance', 'Retargeting'],
+  'EgoSim::Wan2.1-Fun-14B-InP':['Appearance', 'Physics'],
+  'Zero-WAM::Wan2.2-TI2V-5B':['Appearance', 'Policy'],
+  'TraceGen::3D trace-space world model':['Policy'],
+  'μ₀::3D trace world model':['Policy'],
+  'HumanEgo::Aria egocentric demonstrations':['Geometry'],
+  'AINA::Aria Gen 2 demonstrations':['Geometry'],
+};
+
+const stagesForCapabilityModule = (pipelineName:string, module:PipelineModule):Stage[] => {
+  if (module.contributesTo) return module.contributesTo;
+  const override = capabilityStageOverrides[`${pipelineName}::${module.name}`];
+  if (override) return override;
+  if (!module.capability) return [];
+  const category = capabilityCategory.get(module.capability);
+  const defaults = category ? capabilityStageDefaults[category] ?? [] : [];
+  if (category === '3D generation' && /texture|pbr|appearance|renderable|visual/i.test(module.role)) return [...defaults, 'Appearance'];
+  if (category === 'Video generation / world models') {
+    const inferred = new Set<Stage>();
+    if (/image|video|visual|render|inpaint|appearance|pixel/i.test(`${module.phase} ${module.role}`)) inferred.add('Appearance');
+    if (/action.condition|dynamics|transition|physics|rollout|simulat|world model|forecast/i.test(`${module.phase} ${module.role}`)) inferred.add('Physics');
+    return [...inferred];
+  }
+  if (category === 'Capture / data / annotation') {
+    const inferred = new Set<Stage>();
+    if (/3d|depth|pose|slam|reconstruct|geometry|hand/i.test(module.role)) inferred.add('Geometry');
+    if (/action|retarget|robot motion|trajectory/i.test(module.role)) inferred.add('Retargeting');
+    return [...inferred];
+  }
+  return defaults;
+};
+
+const stageEvidenceFor = (item:(typeof pipelines)[number], modules:PipelineModule[], stage:Stage) => {
+  const matches = modules.map((module, index) => ({ module, index })).filter(({ module }) => !/capture|input|data|observe/i.test(module.phase) && stageModulePatterns[stage].test(`${module.phase} ${module.name} ${module.role}`));
+  const implementation = matches.slice(0, 2).map(({ module }) => module.name).join(' + ');
+  const fallback:Record<Stage, string> = { Geometry:item.representation, Appearance:item.representation, Physics:item.simulator, Retargeting:item.representation, Policy:item.output };
+  const method = implementation || fallback[stage];
+  const stackTools = [...new Set(modules.filter((module) => module.capability && stagesForCapabilityModule(item.name, module).includes(stage)).map((module) => module.capability as string))];
+  const contracts:Record<Stage, { description:string; notation:string; inputEq:string; inputDetail:string; stepEq:string; stepDetail:string; outputEq:string; outputDetail:string }> = {
+    Geometry:{
+      description:'Estimates scene structure and spatial registration from sensor observations.',
+      notation:'I: image · D: depth · Tᶜ_w: camera pose · P: points · Ĝ: estimated geometry',
+      inputEq:'𝒪 = {Iₜ, Dₜ, Tᶜ_w, Pₜ}', inputDetail:item.input,
+      stepEq:'Ĝ = fθ(𝒪)', stepDetail:method,
+      outputEq:'Ĝ = {𝒳, T, 𝓜}', outputDetail:'Geometry · poses · masks',
+    },
+    Appearance:{
+      description:'Models radiance or generates observations conditioned on geometry and viewpoint.',
+      notation:'Ĝ: geometry · c: camera · ρ: density · α: opacity · z: latent · Î: rendered view',
+      inputEq:'xₜ = (Ĝ, cₜ, Iₜ)', inputDetail:item.input,
+      stepEq:'Îₜ = Rψ(Ĝ, cₜ)', stepDetail:method,
+      outputEq:'Â = {ρ, c, α, z},  Î₁:ₜ', outputDetail:'Renderable appearance · image or video sequence',
+    },
+    Physics:{
+      description:'Identifies physical parameters or predicts action-conditioned state transitions.',
+      notation:'s: state · a: action · φ: physical parameters · Fφ: transition map · y: observation',
+      inputEq:'xₜ = (ŝₜ, aₜ; φ)', inputDetail:item.representation,
+      stepEq:'(ŝₜ₊₁, ŷₜ) = Fφ(ŝₜ, aₜ)', stepDetail:method,
+      outputEq:'(φ̂phys, ŝ₁:ₜ)', outputDetail:item.simulator,
+    },
+    Retargeting:{
+      description:'Maps human motion or task constraints into a robot-feasible action space.',
+      notation:'qᴴ/qᴿ: human/robot configuration · 𝒦ᴿ: robot kinematics · 𝒞: constraints · Tκ: transfer map',
+      inputEq:'x = (qᴴ₁:ₜ, 𝒦ᴿ, 𝒞)', inputDetail:item.input,
+      stepEq:'(qᴿ, aᴿ) = Tκ(qᴴ, 𝒦ᴿ, 𝒞)', stepDetail:method,
+      outputEq:'(qᴿ₁:ₜ, aᴿ₁:ₜ) ∈ 𝒬feasible', outputDetail:'Robot trajectory · executable action labels',
+    },
+    Policy:{
+      description:'Fits an action distribution from demonstrations, rewards, or simulated rollouts.',
+      notation:'𝒟: trajectories · o: observation · a: action · r: reward · ℓ: instruction · πθ: policy',
+      inputEq:'𝒟 = {(oₜ, aₜ, rₜ)}ₜ₌₁ᵀ', inputDetail:item.representation,
+      stepEq:'πθ ← BC(𝒟)  or  RL(Fφ, r)', stepDetail:method,
+      outputEq:'aₜ ∼ πθ(· | o≤ₜ, ℓ)', outputDetail:item.output,
+    },
+  };
+  return { ...contracts[stage], stackTools };
 };
 
 const publicationStatus = (item: (typeof pipelines)[number]) => publicationVenues[item.name] ?? { label:'Archival venue not verified', verified:false };
@@ -220,6 +335,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
   const [selectedTasks, setSelectedTasks] = useState<TaskFacet[]>([]);
   const [selectedLocomotion, setSelectedLocomotion] = useState<LocomotionFacet[]>([]);
   const [selectedBodyScopes, setSelectedBodyScopes] = useState<BodyScope[]>([]);
+  const [selectedPhysicsKinds, setSelectedPhysicsKinds] = useState<PhysicsKind[]>([]);
   const [filtersPinned, setFiltersPinned] = useState(false);
   const [showAllPipelines, setShowAllPipelines] = useState(false);
   const [showAllTools, setShowAllTools] = useState(false);
@@ -238,6 +354,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
       const restoredTasks = params.getAll('task').flatMap((value) => value.split(',')).filter((value): value is TaskFacet => taskFacets.includes(value as TaskFacet));
       const restoredLocomotion = params.getAll('mobility').flatMap((value) => value.split(',')).filter((value): value is LocomotionFacet => locomotionFacets.includes(value as LocomotionFacet));
       const restoredBodyScopes = params.getAll('body').flatMap((value) => value.split(',')).filter((value): value is BodyScope => bodyScopes.includes(value as BodyScope));
+      const restoredPhysicsKinds = params.getAll('physics').flatMap((value) => value.split(',')).filter((value): value is PhysicsKind => physicsKindNotes.some((item) => item.kind === value));
       const restoredTool = params.get('tool');
       setQuery(q ?? '');
       setDomain(d && ['Graphics', 'Robotics', 'Cross-domain'].includes(d) ? d : 'All');
@@ -246,6 +363,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
       setSelectedTasks([...new Set(restoredTasks)]);
       setSelectedLocomotion([...new Set(restoredLocomotion)]);
       setSelectedBodyScopes([...new Set(restoredBodyScopes)]);
+      setSelectedPhysicsKinds([...new Set(restoredPhysicsKinds)]);
       if (restoredTool) {
         setToolStage('All');
         setShowAllTools(true);
@@ -283,8 +401,9 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
     selectedTasks.forEach((task) => params.append('task', task));
     selectedLocomotion.forEach((locomotion) => params.append('mobility', locomotion));
     selectedBodyScopes.forEach((scope) => params.append('body', scope));
+    selectedPhysicsKinds.forEach((kind) => params.append('physics', kind));
     window.history.replaceState({}, '', `${window.location.pathname}${params.size ? `?${params}` : ''}${window.location.hash}`);
-  }, [query, domain, selectedBodyScopes, selectedHardware, selectedLocomotion, selectedStages, selectedTasks]);
+  }, [query, domain, selectedBodyScopes, selectedHardware, selectedLocomotion, selectedPhysicsKinds, selectedStages, selectedTasks]);
 
   const toggleStage = (candidate: Stage) => setSelectedStages((current) => current.includes(candidate)
     ? current.filter((stage) => stage !== candidate)
@@ -301,19 +420,24 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
   const toggleBodyScope = (candidate: BodyScope) => setSelectedBodyScopes((current) => current.includes(candidate)
     ? current.filter((scope) => scope !== candidate)
     : bodyScopes.filter((scope) => current.includes(scope) || scope === candidate));
+  const togglePhysicsKind = (candidate: PhysicsKind) => setSelectedPhysicsKinds((current) => current.includes(candidate)
+    ? current.filter((kind) => kind !== candidate)
+    : physicsKindNotes.map((item) => item.kind).filter((kind) => current.includes(kind) || kind === candidate));
 
   const filtered = useMemo(() => [...pipelines].filter((item) => {
     const hardware = hardwareProfileFor(item);
     const tasks = taskProfileFor(item);
     const locomotion = locomotionProfileFor(item);
     const bodyScope = bodyScopeFor(item);
-    const haystack = `${item.name} ${item.summary} ${item.input} ${item.output} ${item.representation} ${item.simulator} ${hardware.label} ${hardware.facets.join(' ')} ${tasks.join(' ')} ${locomotion.join(' ')} ${bodyScope.join(' ')}`.toLowerCase();
-    return (!query || haystack.includes(query.toLowerCase())) && (domain === 'All' || item.domain === domain) && selectedStages.every((stage) => item.stages.includes(stage)) && selectedHardware.every((facet) => hardware.facets.includes(facet)) && (!selectedTasks.length || selectedTasks.some((facet) => tasks.includes(facet))) && (!selectedLocomotion.length || selectedLocomotion.some((facet) => locomotion.includes(facet))) && (!selectedBodyScopes.length || selectedBodyScopes.some((scope) => bodyScope.includes(scope))) && (rating === 'All' || real2simRelevance(item).band === rating);
-  }).sort((a, b) => b.year - a.year || pipelineReleaseMonth(b.date) - pipelineReleaseMonth(a.date) || a.name.localeCompare(b.name)), [query, domain, rating, selectedBodyScopes, selectedHardware, selectedLocomotion, selectedStages, selectedTasks]);
+    const physics = physicsProfileFor(item);
+    const institution = institutionFor(item.name);
+    const haystack = `${item.name} ${institution.label} ${item.summary} ${item.input} ${item.output} ${item.representation} ${item.simulator} ${hardware.label} ${hardware.facets.join(' ')} ${tasks.join(' ')} ${locomotion.join(' ')} ${bodyScope.join(' ')}`.toLowerCase();
+    return (!query || haystack.includes(query.toLowerCase())) && (domain === 'All' || item.domain === domain) && selectedStages.every((stage) => item.stages.includes(stage)) && selectedHardware.every((facet) => hardware.facets.includes(facet)) && (!selectedTasks.length || selectedTasks.some((facet) => tasks.includes(facet))) && (!selectedLocomotion.length || selectedLocomotion.some((facet) => locomotion.includes(facet))) && (!selectedBodyScopes.length || selectedBodyScopes.some((scope) => bodyScope.includes(scope))) && (!selectedPhysicsKinds.length || selectedPhysicsKinds.includes(physics.kind)) && (rating === 'All' || real2simRelevance(item).band === rating);
+  }).sort((a, b) => b.year - a.year || pipelineReleaseMonth(b.date) - pipelineReleaseMonth(a.date) || a.name.localeCompare(b.name)), [query, domain, rating, selectedBodyScopes, selectedHardware, selectedLocomotion, selectedPhysicsKinds, selectedStages, selectedTasks]);
 
   const filteredTools = [...(toolStage === 'All' ? capabilities : capabilities.filter((tool) => tool.stage === toolStage))].sort((a, b) => {
     const usageDifference = verifiedUsageCount(b.name) - verifiedUsageCount(a.name);
-    return usageDifference || b.year - a.year || a.name.localeCompare(b.name);
+    return usageDifference || capabilityDetailFor(b).date.localeCompare(capabilityDetailFor(a).date) || a.name.localeCompare(b.name);
   });
   const openCount = pipelines.filter((item) => item.open === 'Open').length;
   const physicsCount = pipelines.filter((item) => item.stages.includes('Physics')).length;
@@ -329,7 +453,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
   const locomotionDistribution = locomotionFacets.map((facet) => ({ facet, count:pipelines.filter((pipeline) => locomotionProfileFor(pipeline).includes(facet)).length }));
   const bodyScopeDistribution = bodyScopes.map((scope) => ({ scope, count:pipelines.filter((pipeline) => bodyScopeFor(pipeline).includes(scope)).length }));
   const physicsDistribution = physicsKindNotes.map((item) => ({ ...item, count:pipelines.filter((pipeline) => physicsProfileFor(pipeline).kind === item.kind).length }));
-  const activeFilterCount = selectedStages.length + selectedHardware.length + selectedTasks.length + selectedLocomotion.length + selectedBodyScopes.length + (query ? 1 : 0) + (domain !== 'All' ? 1 : 0) + (rating !== 'All' ? 1 : 0);
+  const activeFilterCount = selectedStages.length + selectedHardware.length + selectedTasks.length + selectedLocomotion.length + selectedBodyScopes.length + selectedPhysicsKinds.length + (query ? 1 : 0) + (domain !== 'All' ? 1 : 0) + (rating !== 'All' ? 1 : 0);
   const displayedPipelines = showAllPipelines ? filtered : filtered.slice(0, 18);
   const displayedTools = showAllTools ? filteredTools : filteredTools.slice(0, 18);
 
@@ -395,14 +519,15 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
           <label className="search-field"><span>⌕</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search model, representation, simulator…" aria-label="Search pipelines" /><kbd>/</kbd></label>
           <select value={domain} onChange={(event) => setDomain(event.target.value as 'All' | Domain)} aria-label="Filter by domain"><option>All</option><option>Graphics</option><option>Robotics</option><option>Cross-domain</option></select>
           <select value={rating} onChange={(event) => setRating(event.target.value as typeof rating)} aria-label="Filter by five-stage pipeline coverage rating"><option>All</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
-          {(query || domain !== 'All' || selectedStages.length > 0 || selectedHardware.length > 0 || selectedTasks.length > 0 || selectedLocomotion.length > 0 || selectedBodyScopes.length > 0 || rating !== 'All') && <button className="clear-button" onClick={() => { setQuery(''); setDomain('All'); setSelectedStages([]); setSelectedHardware([]); setSelectedTasks([]); setSelectedLocomotion([]); setSelectedBodyScopes([]); setRating('All'); }}>Clear all</button>}
+          {(query || domain !== 'All' || selectedStages.length > 0 || selectedHardware.length > 0 || selectedTasks.length > 0 || selectedLocomotion.length > 0 || selectedBodyScopes.length > 0 || selectedPhysicsKinds.length > 0 || rating !== 'All') && <button className="clear-button" onClick={() => { setQuery(''); setDomain('All'); setSelectedStages([]); setSelectedHardware([]); setSelectedTasks([]); setSelectedLocomotion([]); setSelectedBodyScopes([]); setSelectedPhysicsKinds([]); setRating('All'); }}>Clear all</button>}
           <div className="stage-multi-filter" aria-label="Filter by all selected pipeline stages"><span>STAGES · MATCH ALL {selectedStages.length ? `· ${selectedStages.length} SELECTED` : ''}</span>{stages.map((item, index) => <button type="button" key={item} aria-pressed={selectedStages.includes(item)} className={selectedStages.includes(item) ? 'active' : ''} onClick={() => toggleStage(item)}><i style={{background:stageColors[index]}} />{item}</button>)}{selectedStages.length > 0 && <button type="button" className="clear-stages" onClick={() => setSelectedStages([])}>Clear stages</button>}</div>
           <div className="task-multi-filter" aria-label="Filter by manipulation or navigation task objective"><span>TASK OBJECTIVE · MATCH ANY {selectedTasks.length ? `· ${selectedTasks.length} SELECTED` : ''}</span>{taskDistribution.map((item) => <button type="button" key={item.facet} aria-pressed={selectedTasks.includes(item.facet)} className={selectedTasks.includes(item.facet) ? 'active' : ''} onClick={() => toggleTask(item.facet)}><i />{item.facet}<b>{item.count}</b></button>)}{selectedTasks.length > 0 && <button type="button" className="clear-tasks" onClick={() => setSelectedTasks([])}>Clear tasks</button>}</div>
           <div className="locomotion-multi-filter" aria-label="Filter by independently modeled locomotion or mobility"><span>MOBILITY / LOCOMOTION · MATCH ANY {selectedLocomotion.length ? `· ${selectedLocomotion.length} SELECTED` : ''}</span>{locomotionDistribution.map((item) => <button type="button" key={item.facet} aria-pressed={selectedLocomotion.includes(item.facet)} className={selectedLocomotion.includes(item.facet) ? 'active' : ''} onClick={() => toggleLocomotion(item.facet)}><i />{item.facet}<b>{item.count}</b></button>)}{selectedLocomotion.length > 0 && <button type="button" className="clear-locomotion" onClick={() => setSelectedLocomotion([])}>Clear locomotion</button>}</div>
           <div className="body-scope-filter" aria-label="Filter by upper-body or whole-body control scope"><span>BODY SCOPE · MATCH ANY {selectedBodyScopes.length ? `· ${selectedBodyScopes.length} SELECTED` : ''}</span>{bodyScopeDistribution.map((item) => <button type="button" key={item.scope} aria-pressed={selectedBodyScopes.includes(item.scope)} className={selectedBodyScopes.includes(item.scope) ? 'active' : ''} onClick={() => toggleBodyScope(item.scope)}><i />{item.scope}<b>{item.count}</b></button>)}{selectedBodyScopes.length > 0 && <button type="button" className="clear-body-scopes" onClick={() => setSelectedBodyScopes([])}>Clear body scope</button>}</div>
+          <div className="hardware-multi-filter physics-kind-filter" aria-label="Filter by physics offered"><span>PHYSICS OFFERED · MATCH ANY {selectedPhysicsKinds.length ? `· ${selectedPhysicsKinds.length} SELECTED` : ''}</span>{physicsDistribution.map((item) => <button type="button" key={item.kind} aria-pressed={selectedPhysicsKinds.includes(item.kind)} className={selectedPhysicsKinds.includes(item.kind) ? 'active' : ''} onClick={() => togglePhysicsKind(item.kind)}><i />{item.kind}<b>{item.count}</b></button>)}{selectedPhysicsKinds.length > 0 && <button type="button" className="clear-hardware" onClick={() => setSelectedPhysicsKinds([])}>Clear physics</button>}</div>
           <div className="hardware-multi-filter" aria-label="Filter by all selected tested hardware categories"><span>TESTED HARDWARE · MATCH ALL {selectedHardware.length ? `· ${selectedHardware.length} SELECTED` : ''}</span>{hardwareDistribution.map((item) => <button type="button" key={item.facet} aria-pressed={selectedHardware.includes(item.facet)} className={selectedHardware.includes(item.facet) ? 'active' : ''} onClick={() => toggleHardware(item.facet)}><i />{item.facet}<b>{item.count}</b></button>)}{selectedHardware.length > 0 && <button type="button" className="clear-hardware" onClick={() => setSelectedHardware([])}>Clear hardware</button>}</div>
         </div>
-        <div className="results-meta"><span>{filtered.length} of {pipelines.length} pipelines · {collisionMeshSystems.length} strict collision-mesh outputs</span><span>{selectedStages.length || selectedHardware.length || selectedTasks.length || selectedLocomotion.length || selectedBodyScopes.length ? `${selectedTasks.length ? `TASK · ${selectedTasks.join(' / ')} · ` : ''}${selectedLocomotion.length ? `LOCOMOTION · ${selectedLocomotion.join(' / ')} · ` : ''}${selectedBodyScopes.length ? `BODY · ${selectedBodyScopes.join(' / ')} · ` : ''}CONSTRAINTS · ${[...selectedStages, ...selectedHardware].join(' + ') || 'none'}` : 'Sorted by year + release month ↓'}</span></div>
+        <div className="results-meta"><span>{filtered.length} of {pipelines.length} pipelines · {collisionMeshSystems.length} strict collision-mesh outputs</span><span>{selectedStages.length || selectedHardware.length || selectedTasks.length || selectedLocomotion.length || selectedBodyScopes.length || selectedPhysicsKinds.length ? `${selectedTasks.length ? `TASK · ${selectedTasks.join(' / ')} · ` : ''}${selectedLocomotion.length ? `LOCOMOTION · ${selectedLocomotion.join(' / ')} · ` : ''}${selectedBodyScopes.length ? `BODY · ${selectedBodyScopes.join(' / ')} · ` : ''}${selectedPhysicsKinds.length ? `PHYSICS · ${selectedPhysicsKinds.join(' / ')} · ` : ''}CONSTRAINTS · ${[...selectedStages, ...selectedHardware].join(' + ') || 'none'}` : 'Sorted by year + release month ↓'}</span></div>
         <div className="pipeline-list">
           {displayedPipelines.map((item, index) => {
             const modules = pipelineModules[item.name] ?? [];
@@ -414,10 +539,12 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
             const outputFormat = outputFormatFor(item);
             const hardware = hardwareProfileFor(item);
             const physics = physicsProfileFor(item);
+            const institution = institutionFor(item.name);
+            const datasets = datasetProfileFor(item);
             return <details className="pipeline-row" key={item.name}>
             <summary>
               <span className="row-index">{String(index + 1).padStart(2, '0')}</span>
-              <span className="row-name"><strong>{item.name}</strong><small>{item.date} · {item.domain}</small>{sceneReport && <span className={`row-scene-count scene-${sceneReport.status}`}>SCENES · {sceneReport.amount}</span>}</span>
+              <span className="row-name"><strong>{item.name}</strong><small>{item.date} · {item.domain}</small><span className={`row-institution ${institution.verified ? 'institution-verified' : ''}`}>INSTITUTE · {institution.label}</span>{sceneReport && <span className={`row-scene-count scene-${sceneReport.status}`}>SCENES · {sceneReport.amount}</span>}</span>
               <span className="row-flow"><i>{item.input}</i><b>→</b><i>{item.representation}</i><b>→</b><i>{item.output}</i></span>
               <span className={`output-format-cell ${outputFormat.strict ? 'format-collision' : ''}`}><small>OUTPUT FORMAT</small><strong>{outputFormat.category}</strong><b>{outputFormat.suffix}</b></span>
               <span className={`physics-profile-cell physics-${physics.kind === 'NA' ? 'na' : 'active'}`}><small>PHYSICS</small><strong>{physics.kind}</strong><b>{physics.representation}</b></span>
@@ -428,8 +555,8 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
               <span className="expand">＋</span>
             </summary>
             <div className="row-detail">
-              <div className="detail-lead"><p>{item.summary}</p><small className="coverage-label">RATING EVIDENCE · EXACTLY {relevance.score} OF 5 STAGES</small><div className="relevance-components">{relevance.components.map((component) => <span key={component.label} className={component.covered ? 'covered' : ''}>{component.covered ? '●' : '○'} {component.label}</span>)}</div></div>
-              <dl><div><dt>Reported signal</dt><dd>{item.metric}</dd></div>{sceneReport && <div><dt>Converted scenes</dt><dd><a className="evidence-inline" href={sceneReport.href} target="_blank" rel="noreferrer"><strong>{sceneReport.amount}</strong> · {sceneReport.detail} ↗</a></dd></div>}<div><dt>Publication / venue</dt><dd><a className="evidence-inline" href={publication.href ?? item.paper} target="_blank" rel="noreferrer"><strong>{publication.verified ? 'Peer reviewed · verified' : 'Release status'}</strong> · {publication.label} ↗</a></dd></div><div><dt>Physics offered</dt><dd><strong>{physics.kind}</strong> · {physics.scope}</dd></div><div><dt>Physics representation</dt><dd>{physics.representation}</dd></div><div><dt>Simulation engine</dt><dd><a className="evidence-inline" href={item.paper} target="_blank" rel="noreferrer">{item.simulator} ↗</a></dd></div><div><dt>Test embodiment</dt><dd><a className="evidence-inline" href={item.paper} target="_blank" rel="noreferrer">{item.embodiments} ↗</a></dd></div><div><dt>Watch for</dt><dd>{item.caveat}</dd></div></dl>
+              <div className="detail-lead"><p>{item.summary}</p><small className="coverage-label">RATING EVIDENCE · EXACTLY {relevance.score} OF 5 STAGES</small><div className="relevance-components">{relevance.components.map((component) => { const evidence = component.covered ? stageEvidenceFor(item, modules, component.label) : undefined; return <article key={component.label} className={`rating-stage ${component.covered ? 'covered' : 'uncovered'}`}><span>{component.covered ? '●' : '○'} {component.label}</span>{evidence && <><p className="rating-stage-description">{evidence.description}</p><p className="rating-stage-notation"><b>NOTATION</b>{evidence.notation}</p><nav className="rating-stage-tools"><b>STACK PICKS</b>{evidence.stackTools.length ? evidence.stackTools.map((tool) => <Link key={tool} href={`/capabilities/?tool=${encodeURIComponent(tool)}#${toolId(tool)}`}>{tool} ↗</Link>) : <span>No separately named Stack tool reported</span>}</nav><dl><div><dt>IN</dt><dd><code>{evidence.inputEq}</code><small>{evidence.inputDetail}</small></dd></div><div><dt>MAP</dt><dd><code>{evidence.stepEq}</code><small>{evidence.stepDetail}</small></dd></div><div><dt>OUT</dt><dd><code>{evidence.outputEq}</code><small>{evidence.outputDetail}</small></dd></div></dl></>}</article>; })}</div></div>
+              <dl><div className="dataset-profile"><dt>Datasets / splits</dt><dd><section className="dataset-corpus"><header><b>{datasets.fitLabel}</b>{datasets.fitCount && <strong>{datasets.fitCount}</strong>}</header><h4>{datasets.fitName}</h4><span>{datasets.fit}</span></section><section className="dataset-corpus"><header><b>{datasets.evalLabel}</b>{datasets.evalCount && <strong>{datasets.evalCount}</strong>}</header><h4>{datasets.evalName}</h4><span>{datasets.evaluation}</span></section><aside><small className={`dataset-split split-${datasets.split.toLowerCase().replaceAll(' ', '-').replaceAll('/', '-')}`}>{datasets.split}</small><small>{datasets.note}</small></aside></dd></div><div><dt>Reported signal</dt><dd>{item.metric}</dd></div>{sceneReport && <div><dt>Converted scenes</dt><dd><a className="evidence-inline" href={sceneReport.href} target="_blank" rel="noreferrer"><strong>{sceneReport.amount}</strong> · {sceneReport.detail} ↗</a></dd></div>}<div><dt>Institute / affiliation</dt><dd><a className="evidence-inline" href={item.project} target="_blank" rel="noreferrer"><strong>{institution.label}</strong> · {institution.verified ? 'reported by project or paper' : 'not independently verified'} ↗</a></dd></div><div><dt>Publication / venue</dt><dd><a className="evidence-inline" href={publication.href ?? item.paper} target="_blank" rel="noreferrer"><strong>{publication.verified ? 'Peer reviewed · verified' : 'Release status'}</strong> · {publication.label} ↗</a></dd></div><div><dt>Physics offered</dt><dd><strong>{physics.kind}</strong> · {physics.scope}</dd></div><div><dt>Physics representation</dt><dd>{physics.representation}</dd></div><div><dt>Simulation engine</dt><dd><a className="evidence-inline" href={item.paper} target="_blank" rel="noreferrer">{item.simulator} ↗</a></dd></div><div><dt>Test embodiment</dt><dd><a className="evidence-inline" href={item.paper} target="_blank" rel="noreferrer">{item.embodiments} ↗</a></dd></div><div><dt>Watch for</dt><dd>{item.caveat}</dd></div></dl>
               <div className="resource-links"><a href={item.project} target="_blank" rel="noreferrer">Project ↗</a><a href={item.paper} target="_blank" rel="noreferrer">Primary source ↗</a>{item.code && <a href={item.code} target="_blank" rel="noreferrer">Code ↗</a>}</div>
               <div className="system-graph">
                 <header><div><span>CONNECTED PIPELINE GRAPH</span><strong>{modules.length} traced modules · {stackModuleCount} linked to Capability Stack</strong></div><p>Solid modules jump to their stack entry. Dashed modules are project-native, engine-level, or not yet represented by a reusable foundation tool.</p></header>
@@ -461,13 +588,14 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
         <div className="tool-tabs" id="tools" role="tablist" aria-label="Filter tools by capability stage">
           {['All', ...capabilityStages].map((item) => <button role="tab" aria-selected={toolStage === item} key={item} onClick={() => setToolStage(item)}>{item}<span>{item === 'All' ? capabilities.length : capabilities.filter((tool) => tool.stage === item).length}</span></button>)}
         </div>
-        <p className="usage-sort-note">ORDER · VERIFIED DOWNSTREAM USE ↓ <span>Latest year, then name, breaks ties.</span></p>
+        <p className="usage-sort-note">ORDER · VERIFIED DOWNSTREAM USE ↓ <span>Latest verified year–month, then name, breaks ties.</span></p>
         <div className="table-shell">
           <table className="capability-table">
-            <thead><tr><th>Stage / tool</th><th>Year</th><th>What it contributes</th><th>Reported metric</th><th>Open source</th><th>API / interface</th><th>Local deploy</th><th>Used by / evidence</th></tr></thead>
+            <thead><tr><th>Stage / tool</th><th>Date</th><th>Technical interface</th><th>Cost / throughput</th><th>Open source</th><th>API / interface</th><th>Deploy / compute</th><th>Used by / evidence</th></tr></thead>
             <tbody>{displayedTools.map((tool) => {
               const evidence = capabilityEvidence[tool.name] ?? [];
-              return <tr id={toolId(tool.name)} className={highlightedTool === tool.name ? 'tool-highlighted' : ''} key={`${tool.stage}-${tool.name}`}><td><span className="table-stage">{tool.stage}</span><a href={tool.href} target="_blank" rel="noreferrer">{tool.name} ↗</a></td><td className="mono">{tool.year}</td><td>{tool.capability}</td><td className="metric">{tool.metric}</td><td>{tool.open}</td><td>{tool.api}</td><td>{tool.local}</td><td className="usage-cell">{evidence.length ? evidence.map((item) => <a className={`evidence-${item.relation}`} href={item.href} target="_blank" rel="noreferrer" key={`${item.work}-${item.relation}`}><small>{item.relation}</small>{item.work} ↗</a>) : <span>Not yet traced to a verified downstream implementation</span>}</td></tr>;
+              const detail = capabilityDetailFor(tool);
+              return <tr id={toolId(tool.name)} className={highlightedTool === tool.name ? 'tool-highlighted' : ''} key={`${tool.stage}-${tool.name}`}><td><span className="table-stage">{tool.stage}</span><a href={tool.href} target="_blank" rel="noreferrer">{tool.name} ↗</a></td><td className="mono capability-date">{detail.date}</td><td><p className="capability-summary">{tool.capability}</p><dl className="capability-interface"><div><dt>IN</dt><dd>{detail.input}</dd></div><div><dt>ARCH</dt><dd>{detail.architecture}</dd></div><div><dt>OUT</dt><dd>{detail.output}</dd></div></dl></td><td className="metric"><strong>{tool.metric}</strong><dl className="capability-cost"><div><dt>TRAIN</dt><dd>{detail.trainCost}</dd></div><div><dt>INFER</dt><dd>{detail.inferCost}</dd></div></dl></td><td>{tool.open}</td><td>{tool.api}</td><td><span>{tool.local}</span><dl className="capability-compute"><div><dt>COMPUTE</dt><dd>{detail.compute}</dd></div></dl></td><td className="usage-cell">{evidence.length ? evidence.map((item) => <a className={`evidence-${item.relation}`} href={item.href} target="_blank" rel="noreferrer" key={`${item.work}-${item.relation}`}><small>{item.relation}</small>{item.work} ↗</a>) : <span>Not yet traced to a verified downstream implementation</span>}</td></tr>;
             })}</tbody>
           </table>
         </div>
