@@ -124,7 +124,7 @@ const stagesForCapabilityModule = (pipelineName:string, module:PipelineModule):S
 };
 
 const stageEvidenceFor = (item:(typeof pipelines)[number], modules:PipelineModule[], stage:Stage) => {
-  const matches = modules.map((module, index) => ({ module, index })).filter(({ module }) => !/capture|input|data|observe/i.test(module.phase) && stageModulePatterns[stage].test(`${module.phase} ${module.name} ${module.role}`));
+  const matches = modules.map((module, index) => ({ module, index })).filter(({ module }) => !/capture|input|data|observe/i.test(module.phase) && (module.contributesTo ? module.contributesTo.includes(stage) : stageModulePatterns[stage].test(`${module.phase} ${module.name} ${module.role}`)));
   const implementation = matches.slice(0, 2).map(({ module }) => module.name).join(' + ');
   const fallback:Record<Stage, string> = { Geometry:item.representation, Appearance:item.representation, Physics:item.simulator, Retargeting:item.representation, Policy:item.output };
   const method = implementation || fallback[stage];
@@ -176,6 +176,7 @@ const outputFormatFor = (item: (typeof pipelines)[number]) => {
   const text = `${item.representation} ${item.output}`;
   if (item.name === 'MicroDuck') return { category:'POLICY', suffix:'.ONNX', strict:false };
   if (/URDF.*USD|USD.*URDF/i.test(text)) return { category:'ARTICULATED ASSET', suffix:'.URDF + .USD', strict:false };
+  if (/\bURDF\b/i.test(text)) return { category:'ARTICULATED ASSET', suffix:'.URDF', strict:false };
   if (/\bUSD\b/i.test(text)) return { category:'SCENE ASSET', suffix:'.USD', strict:false };
   if (/MJCF/i.test(text)) return { category:'ROBOT MODEL', suffix:'.XML / MJCF', strict:false };
   if (/3DGS|Gaussian/i.test(text)) return { category:'GAUSSIAN SCENE', suffix:'.PLY / SPLAT', strict:false };

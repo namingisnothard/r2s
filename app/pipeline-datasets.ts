@@ -16,6 +16,7 @@ export type PipelineDatasetProfile = {
 type DatasetDetails = Omit<PipelineDatasetProfile, 'fitName' | 'evalName'>;
 
 const datasetIdentities: Record<string, { fitName:string; evalName:string }> = {
+  'SPARK':{ fitName:'PartNet-Mobility', evalName:'GAPartNet · articulated-object reconstruction' },
   'SoMA':{ fitName:'SoMA ARX-Lift captures · author-collected, unnamed', evalName:'SoMA object rollout suite · author-collected, unnamed' },
   'MicroDuck':{ fitName:'MicroDuck mjlab rollout corpus · procedurally generated', evalName:'MicroDuck physical skill suite · author-defined' },
   'ReaDy-Go':{ fitName:'ReaDy-Go three-environment capture set · author-collected, unnamed', evalName:'ReaDy-Go real navigation trials · author-collected, unnamed' },
@@ -125,6 +126,7 @@ const datasetIdentities: Record<string, { fitName:string; evalName:string }> = {
 };
 
 const profiles: Record<string, DatasetDetails> = {
+  'SPARK':{ fitLabel:'TRAIN', fit:'URDF-guided part merging and open / closed / half-open augmentation.', evalLabel:'TEST / EVAL', evaluation:'Shape and joint estimation; separate simulated drawer-opening demonstration.', evalCount:'50 images / 25 categories', split:'SEPARATE EVAL', note:'Dataset identities and evaluation size follow arXiv v2; disjoint object identities are not established here.' },
   'SoMA':{ fitLabel:'FIT / RECONSTRUCT', fit:'Per-object synchronized RGB + robot-state sequences.', fitCount:'30–40 seq / object', evalLabel:'TEST / EVAL', evaluation:'Held-out action-conditioned rollouts for rope, cloth, doll, and T-shirt.', evalCount:'4 object classes', split:'SEPARATE EVAL', note:'Sequence-level partition details are not reported.' },
   'MicroDuck':{ fitLabel:'TRAIN', fit:'Randomized mjlab environments generated from the CAD/MJCF embodiment.', fitCount:'4,096 envs', evalLabel:'VALIDATION', evaluation:'Physical walking, recovery, pickup, kicking, rolling, and roller tasks.', evalCount:'7 task types', split:'NO FORMAL SPLIT', note:'No named dataset or standardized held-out test set.' },
   'ReaDy-Go':{ fitLabel:'TRAIN', fit:'Simulated trials in three reconstructed environments.', fitCount:'100 trials / setting', evalLabel:'TEST / EVAL', evaluation:'Physical robot trials per environment/setting.', evalCount:'10 trials / setting', split:'SEPARATE EVAL', note:'Simulation training and physical evaluation are separately reported.' },

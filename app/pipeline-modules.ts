@@ -10,6 +10,14 @@ export type PipelineModule = {
 };
 
 const corePipelineModules: Record<string, PipelineModule[]> = {
+  SPARK: [
+    { name:'GPT-4o structural reasoning', phase:'Structure', role:'Predicts part labels and initial URDF metadata.', href:'https://arxiv.org/html/2512.01629v2#S3.SS1', contributesTo:['Geometry','Physics'] },
+    { name:'Gemini part / open-state guidance', phase:'Guidance', role:'Synthesizes reference images for reconstruction and articulation fitting.', href:'https://arxiv.org/html/2512.01629v2#S3.SS1', contributesTo:['Geometry','Physics'] },
+    { name:'Part-aware diffusion transformer', phase:'Geometry', role:'Generates coherent part meshes using image and hierarchy conditioning.', href:'https://arxiv.org/html/2512.01629v2#S3.SS2', contributesTo:['Geometry'] },
+    { name:'Meshy texture generation', phase:'Appearance', role:'Textures the generated geometry in the released implementation.', href:'https://github.com/YumengHe/SPARK', contributesTo:['Appearance'] },
+    { name:'Differentiable URDF optimization', phase:'Articulation', role:'Refines joints through forward kinematics and differentiable rendering.', href:'https://arxiv.org/html/2512.01629v2#S3.SS3', contributesTo:['Physics'] },
+    { name:'Isaac Sim drawer-opening demo', phase:'Policy', role:'Demonstrates robot learning on a generated asset; no real transfer result.', href:'https://arxiv.org/html/2512.01629v2#S4.SS4', contributesTo:['Policy'] },
+  ],
   SoMA: [
     { name:'Three-camera RGB + joint-state capture', phase:'Capture', role:'Records synchronized 640×480 views and ARX-Lift joint / gripper states at 30 FPS.', href:'https://arxiv.org/html/2602.02402v2#S5.SS1' },
     { name:'Multi-view camera estimation', phase:'Pose', role:'Recovers camera poses and aligns observations before Gaussian reconstruction.', href:'https://arxiv.org/html/2602.02402v2#S4.SS2.SSS1' },

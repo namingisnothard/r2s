@@ -11,6 +11,7 @@ export type PublicationVenue = {
 // peer-reviewed conference or journal publication. A project page, workshop,
 // submission, or announced future venue is not treated as archival evidence.
 const corePublicationVenues: Record<string, PublicationVenue> = {
+  'SPARK': { label:'IEEE/CVF CVPR 2026 · Oral', verified:true, href:'https://openaccess.thecvf.com/content/CVPR2026/papers/He_SPARK_Sim-ready_Part-level_Articulated_Reconstruction_with_VLM_Knowledge_CVPR_2026_paper.pdf' },
   'SoMA': { label: 'arXiv preprint (2026) · archival venue not verified', verified: false },
   'MicroDuck': { label: 'Software/project release · no archival paper verified', verified: false },
   'ReaDy-Go': { label: 'arXiv preprint (2026) · archival venue not verified', verified: false },
