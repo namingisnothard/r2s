@@ -16,6 +16,7 @@ export type PipelineDatasetProfile = {
 type DatasetDetails = Omit<PipelineDatasetProfile, 'fitName' | 'evalName'>;
 
 const datasetIdentities: Record<string, { fitName:string; evalName:string }> = {
+  'AdaRoboVLG':{ fitName:'GraspNet-1Billion + GraspClutter6D assets · Isaac Sim grasp trials', evalName:'DexGraspNet 2.0 · GraspClutter6D · GraspNet-1Billion · real grasp trials' },
   'SPARK':{ fitName:'PartNet-Mobility', evalName:'GAPartNet · articulated-object reconstruction' },
   'SoMA':{ fitName:'SoMA ARX-Lift captures · author-collected, unnamed', evalName:'SoMA object rollout suite · author-collected, unnamed' },
   'MicroDuck':{ fitName:'MicroDuck mjlab rollout corpus · procedurally generated', evalName:'MicroDuck physical skill suite · author-defined' },
@@ -126,6 +127,7 @@ const datasetIdentities: Record<string, { fitName:string; evalName:string }> = {
 };
 
 const profiles: Record<string, DatasetDetails> = {
+  'AdaRoboVLG':{ fitLabel:'TRAIN', fit:'200 objects × hand-specific grasp types for DH3, Allegro, and Inspire; 10:1 training/validation partition. Contact proposal network trained on GraspClutter6D.', fitCount:'4.4M simulated grasp trials', evalLabel:'TEST / EVAL', evaluation:'Simulated clutter, language-guided target grasping, and tracking; separate real static and disturbance trials.', evalCount:'102 static objects · 510 static trials · 195 disturbance trials', split:'EXPLICIT SPLIT', note:'The 10:1 split applies to grasp-decision data. The 89.7% disturbance result is 175/195 applicable trials; rotational testing excludes the symmetric tennis ball. Trial counts are not scene conversions.' },
   'SPARK':{ fitLabel:'TRAIN', fit:'URDF-guided part merging and open / closed / half-open augmentation.', evalLabel:'TEST / EVAL', evaluation:'Shape and joint estimation; separate simulated drawer-opening demonstration.', evalCount:'50 images / 25 categories', split:'SEPARATE EVAL', note:'Dataset identities and evaluation size follow arXiv v2; disjoint object identities are not established here.' },
   'SoMA':{ fitLabel:'FIT / RECONSTRUCT', fit:'Per-object synchronized RGB + robot-state sequences.', fitCount:'30–40 seq / object', evalLabel:'TEST / EVAL', evaluation:'Held-out action-conditioned rollouts for rope, cloth, doll, and T-shirt.', evalCount:'4 object classes', split:'SEPARATE EVAL', note:'Sequence-level partition details are not reported.' },
   'MicroDuck':{ fitLabel:'TRAIN', fit:'Randomized mjlab environments generated from the CAD/MJCF embodiment.', fitCount:'4,096 envs', evalLabel:'VALIDATION', evaluation:'Physical walking, recovery, pickup, kicking, rolling, and roller tasks.', evalCount:'7 task types', split:'NO FORMAL SPLIT', note:'No named dataset or standardized held-out test set.' },

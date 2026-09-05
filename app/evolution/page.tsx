@@ -15,7 +15,7 @@ export default function EvolutionPage() {
     <SiteHeader active="evolution" />
     <section className="subpage-hero evolution-subpage-hero">
       <div><p className="eyebrow">HISTORICAL LINEAGE · STRUCTURAL EVOLUTION</p><h1>The tools change. <em>The questions persist.</em></h1></div>
-      <div className="subpage-intro"><p>From constraint-based character retargeting and learning from demonstration to physics-based imitation, foundation models, agentic scene compilation, and video-conditioned policies.</p><div><span>1990s—2026</span><span>{evolution.length} historical anchors</span><span>{evolutionPhases.length} structural phases</span><span>{evolutionTrends.length} observed shifts</span></div><nav className="foundation-hero-links"><a className="button secondary" href="#historical">Trace the lineage ↓</a><Link className="button secondary" href="/foundations/">Foundations ↗</Link></nav></div>
+      <div className="subpage-intro"><p>From constraint-based character retargeting and learning from demonstration to physics-based imitation, foundation models, agentic scene compilation, and video-conditioned policies.</p><div><span>1990s—2026</span><span>{evolution.length} historical anchors</span><span>{evolutionPhases.length} structural phases</span><span>{evolutionTrends.length} observed shifts</span></div><nav className="foundation-hero-links"><a className="button secondary" href="#historical">Trace the lineage ↓</a><Link className="button secondary" href="/research-lineages/">Research lineages &amp; progress ↗</Link></nav></div>
     </section>
 
     <section className="evolution-section evolution-page-section" id="historical">

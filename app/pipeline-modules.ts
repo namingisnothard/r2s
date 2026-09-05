@@ -10,6 +10,17 @@ export type PipelineModule = {
 };
 
 const corePipelineModules: Record<string, PipelineModule[]> = {
+  AdaRoboVLG: [
+    { name:'DINOv3 scene semantics', capability:'DINOv3', phase:'Geometry', role:'Lifts multi-view RGB-D descriptors into a semantic point field.', href:'https://arxiv.org/html/2609.04096v1#S5.SS1.SSS1', contributesTo:['Geometry'] },
+    { name:'Contact-GraspNet proposals', capability:'Contact-GraspNet', phase:'Grasp proposals', role:'Trains the GraspClutter6D PyTorch implementation to predict scene-level contact primitives.', href:'https://arxiv.org/html/2609.04096v1#S5.SS1.SSS2', contributesTo:['Policy'] },
+    { name:'Seed-1.8 + grasp-taxonomy retrieval', capability:'Seed-1.8', phase:'Task reasoning', role:'Selects objects, functional regions, grasp types, and grounding boxes from instructions.', href:'https://arxiv.org/html/2609.04096v1#S5.SS2', contributesTo:['Geometry','Policy'] },
+    { name:'SAM 3 instance and part masks', capability:'SAM 3', phase:'Segment', role:'Grounds target geometry and filters functional contacts with masks lifted into 3D.', href:'https://arxiv.org/html/2609.04096v1#S5.SS2.SSS2', contributesTo:['Geometry'] },
+    { name:'Explicit hand-specific mapping', phase:'Grasp mapping', role:'Converts geometry, contact primitives, and grasp taxonomy into kinematically compatible hand poses.', href:'https://arxiv.org/html/2609.04096v1#S4.SS3', contributesTo:['Policy'] },
+    { name:'Isaac Sim stability supervision', phase:'Physics', role:'Labels 4.4M trials using fixed friction and six-direction perturbations; no real-world parameter fitting.', href:'https://arxiv.org/html/2609.04096v1#S6.SS1.SSS1', contributesTo:['Physics','Policy'] },
+    { name:'Hand-agnostic grasp evaluation', capability:'AdaRoboVLG base grasp policy', phase:'Policy', role:'Scores local hand–object interaction geometry to choose stable candidates across hands.', href:'https://arxiv.org/html/2609.04096v1#S4.SS5', contributesTo:['Policy'] },
+    { name:'SAM 3 mask propagation', capability:'SAM 3', phase:'Track', role:'Maintains target identity as observations change.', href:'https://arxiv.org/html/2609.04096v1#S5.SS3.SSS1', contributesTo:['Geometry'] },
+    { name:'DINOv3 rigid-pose refinement', capability:'DINOv3', phase:'Pose update', role:'Matches semantic features over time and transforms the initial grasp directly; online updates run at 5 Hz in the conveyor demonstration.', href:'https://arxiv.org/html/2609.04096v1#S5.SS3.SSS2', contributesTo:['Geometry','Policy'] },
+  ],
   SPARK: [
     { name:'GPT-4o structural reasoning', phase:'Structure', role:'Predicts part labels and initial URDF metadata.', href:'https://arxiv.org/html/2512.01629v2#S3.SS1', contributesTo:['Geometry','Physics'] },
     { name:'Gemini part / open-state guidance', phase:'Guidance', role:'Synthesizes reference images for reconstruction and articulation fitting.', href:'https://arxiv.org/html/2512.01629v2#S3.SS1', contributesTo:['Geometry','Physics'] },

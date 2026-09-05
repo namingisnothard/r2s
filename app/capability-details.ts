@@ -23,6 +23,7 @@ const stageInterfaces: Record<string, Pick<CapabilityDetail, 'input' | 'output'>
   'Hand recon': { input:'Hand crops, monocular video, or egocentric frames', output:'MANO parameters, 3D joints, meshes, and hand trajectories' },
   'Body recon': { input:'Human image/video and optional camera evidence', output:'SMPL-family body state, global pose, mesh, or motion trajectory' },
   Pose: { input:'RGB/RGB-D frames and optional object or camera priors', output:'Camera/object pose, calibration, trajectory, depth, or point map' },
+  'Task reasoning / grounding': { input:'Visual observations, instructions, and task knowledge', output:'Grounded targets, functional regions, and task constraints' },
   'Scene graph / structured world state': { input:'Posed sensor evidence, geometry, masks, tracks, and semantics', output:'Persistent entities with typed spatial, temporal, or functional relations' },
   'Kinematics / IK': { input:'Robot model, target poses, constraints, and current configuration', output:'Feasible joint configuration, velocity, or trajectory' },
   Physics: { input:'Geometry/state, actions, contacts, and physical parameters or observations', output:'Next state, forces, material estimates, or executable physics scene' },
@@ -31,6 +32,18 @@ const stageInterfaces: Record<string, Pick<CapabilityDetail, 'input' | 'output'>
 };
 
 const detailOverrides: Record<string, DetailOverride> = {
+  DINOv3: {
+    date:'2025-08', input:'RGB images; calibrated RGB-D supplied separately for 3D lifting', output:'Dense patch descriptors; downstream modules infer semantics or correspondence', architecture:'Self-supervised ViT / ConvNeXt backbones with distilled model variants', trainCost:'Pretrained models released; AdaRoboVLG freezes the feature extractor', inferCost:'Backbone-dependent; AdaRoboVLG whole-system 5 Hz is not encoder-only latency', compute:'Local PyTorch GPU; memory depends on backbone and image resolution',
+  },
+  'Seed-1.8': {
+    date:'2025-12', input:'Text, images/video, and optional retrieved grasp-taxonomy context', output:'Reasoned task specification and visual grounding boxes', architecture:'Proprietary multimodal model; AdaRoboVLG adds retrieval and structured reasoning prompts', trainCost:'Hosted pretrained model; AdaRoboVLG does not report model fine-tuning', inferCost:'API latency and per-grasp cost not reported', compute:'Volcano Engine API; cookbook code does not include local model weights',
+  },
+  'Contact-GraspNet': {
+    date:'2021-03', input:'Scene point cloud; AdaRoboVLG additionally supplies lifted semantic features', output:'Contact locations, approach/closing directions, widths, and contact scores', architecture:'PointNet++ contact-grasp predictor; GraspClutter6D PyTorch implementation', trainCost:'AdaRoboVLG trains proposals on GraspClutter6D; GPU-hours not reported', inferCost:'Module-specific latency not reported in AdaRoboVLG', compute:'Local GPU / PyTorch; public baseline checkpoints are separate from AdaRoboVLG weights',
+  },
+  'AdaRoboVLG base grasp policy': {
+    date:'2026-09', input:'Object geometry, contact primitives, grasp types, and hand specification', output:'Ranked hand poses with joint configurations and predicted stability', architecture:'Explicit kinematic mapping → local hand–object interaction encoding → shared binary stability classifier', trainCost:'4.4M simulated trials; 30 epochs, batch 512; server with 4×RTX 4090; duration not reported', inferCost:'Base-policy latency N/R; dynamic 5 Hz updates transform an initial grasp without rerunning the policy', compute:'PyTorch research stack; full-system code/weights release not verified',
+  },
   AINA: { date:'2025-11' },
   HumanEgo: { date:'2026-05' },
   HumanX: { date:'2026-02' },

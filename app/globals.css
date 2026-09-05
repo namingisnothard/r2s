@@ -249,3 +249,12 @@ h1{font-size:clamp(54px,6.8vw,102px);line-height:.9}.subpage-hero{min-height:390
 .physics-kind-filter{grid-template-columns:190px repeat(4,minmax(145px,1fr))}.physics-kind-filter button i{background:var(--orange)}
 @media(max-width:1100px){.physics-kind-filter{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:620px){.physics-kind-filter{grid-template-columns:1fr 1fr}}
+
+/* Editorial takeaways stay visible before a pipeline card is expanded. */
+.entry-takeaway{margin:0;min-width:0;line-height:1.5}
+.entry-takeaway>small{font:700 8px/1.5 monospace;letter-spacing:.08em}
+.pipeline-takeaway{grid-column:2/-1;display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px}
+.pipeline-takeaway>small{color:var(--teal);padding-top:3px}
+.capability-takeaway{display:flex;flex-direction:column;gap:5px;padding:0 0 0 10px;margin-bottom:12px;border-left:2px solid var(--teal);font-size:11px;color:var(--ink)}
+.capability-takeaway>small{color:var(--teal)}
+@media(max-width:760px){.pipeline-takeaway{grid-column:1/-1;grid-template-columns:1fr;gap:4px;font-size:12px}.pipeline-takeaway>small{padding-top:0}}

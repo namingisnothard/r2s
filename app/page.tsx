@@ -75,6 +75,7 @@ const capabilityStageDefaults: Record<string, Stage[]> = {
   'Hand recon':['Geometry'],
   'Body recon':['Geometry'],
   Pose:['Geometry'],
+  'Task reasoning / grounding':['Geometry', 'Policy'],
   'Scene graph / structured world state':['Geometry'],
   'Kinematics / IK':['Retargeting'],
   Physics:['Physics'],
@@ -343,6 +344,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
   const [rating, setRating] = useState<'All' | 'HIGH' | 'MEDIUM' | 'LOW'>('All');
   const [toolStage, setToolStage] = useState('All');
   const [highlightedTool, setHighlightedTool] = useState('');
+  const [filtersRestored, setFiltersRestored] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -365,6 +367,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
       setSelectedLocomotion([...new Set(restoredLocomotion)]);
       setSelectedBodyScopes([...new Set(restoredBodyScopes)]);
       setSelectedPhysicsKinds([...new Set(restoredPhysicsKinds)]);
+      setFiltersRestored(true);
       if (restoredTool) {
         setToolStage('All');
         setShowAllTools(true);
@@ -373,8 +376,11 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
       }
     };
     const initialSearch = window.location.search;
+    const initialPathname = window.location.pathname;
     const timer = window.setTimeout(() => restoreFilters(initialSearch), 0);
-    const onPopState = () => restoreFilters();
+    const onPopState = () => {
+      if (window.location.pathname === initialPathname) restoreFilters();
+    };
     window.addEventListener('popstate', onPopState);
     return () => {
       window.clearTimeout(timer);
@@ -394,6 +400,9 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
   }, []);
 
   useEffect(() => {
+    // Wait for URL restoration before writing defaults, including in Strict Mode.
+    // Capability links own their `tool` parameter and do not use pipeline filters.
+    if (!filtersRestored || view !== 'pipelines' || !/\/pipelines\/?$/.test(window.location.pathname)) return;
     const params = new URLSearchParams();
     if (query) params.set('q', query);
     if (domain !== 'All') params.set('domain', domain);
@@ -404,7 +413,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
     selectedBodyScopes.forEach((scope) => params.append('body', scope));
     selectedPhysicsKinds.forEach((kind) => params.append('physics', kind));
     window.history.replaceState({}, '', `${window.location.pathname}${params.size ? `?${params}` : ''}${window.location.hash}`);
-  }, [query, domain, selectedBodyScopes, selectedHardware, selectedLocomotion, selectedPhysicsKinds, selectedStages, selectedTasks]);
+  }, [filtersRestored, view, query, domain, selectedBodyScopes, selectedHardware, selectedLocomotion, selectedPhysicsKinds, selectedStages, selectedTasks]);
 
   const toggleStage = (candidate: Stage) => setSelectedStages((current) => current.includes(candidate)
     ? current.filter((stage) => stage !== candidate)
@@ -468,7 +477,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
           <p className="eyebrow"><span className="live-dot" /> Living research index · verified Sep 2026</p>
           <h1>Track how reality becomes a <em>trainable world.</em></h1>
           <p className="hero-intro">An open map of real-to-simulation across neural graphics and robot learning—from decades of human-to-robot transfer to today’s geometry, physics, retargeting, and policy data engines.</p>
-          <div className="hero-actions"><Link className="button primary" href="/evolution/">Trace the evolution ↗</Link><Link className="button secondary" href="/pipelines/">Explore current systems</Link></div>
+          <div className="hero-actions"><Link className="button primary" href="/research-lineages/">Research lineages &amp; progress ↗</Link><Link className="button secondary" href="/pipelines/">Explore current systems</Link></div>
         </div>
         <div className="pipeline-diagram" aria-label="Real-to-simulation pipeline overview">
           <div className="diagram-stage stage-capture"><small>01 · CAPTURE</small><strong>REAL</strong><span>RGB · depth · video</span></div><span className="diagram-arrow">→</span>
@@ -554,6 +563,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
               <span className={`rating-cell relevance-${relevance.band.toLowerCase()}`}><small>R2S COVERAGE</small><strong>{relevance.band}</strong><b>{relevance.score}/5</b></span>
               <span className={`access ${item.open.toLowerCase().replace(' ', '-')}`}>{item.open}</span>
               <span className="expand">＋</span>
+              <span className="entry-takeaway pipeline-takeaway"><small>TAKEAWAY</small><span>{item.takeaway}</span></span>
             </summary>
             <div className="row-detail">
               <div className="detail-lead"><p>{item.summary}</p><small className="coverage-label">RATING EVIDENCE · EXACTLY {relevance.score} OF 5 STAGES</small><div className="relevance-components">{relevance.components.map((component) => { const evidence = component.covered ? stageEvidenceFor(item, modules, component.label) : undefined; return <article key={component.label} className={`rating-stage ${component.covered ? 'covered' : 'uncovered'}`}><span>{component.covered ? '●' : '○'} {component.label}</span>{evidence && <><p className="rating-stage-description">{evidence.description}</p><p className="rating-stage-notation"><b>NOTATION</b>{evidence.notation}</p><nav className="rating-stage-tools"><b>STACK PICKS</b>{evidence.stackTools.length ? evidence.stackTools.map((tool) => <Link key={tool} href={`/capabilities/?tool=${encodeURIComponent(tool)}#${toolId(tool)}`}>{tool} ↗</Link>) : <span>No separately named Stack tool reported</span>}</nav><dl><div><dt>IN</dt><dd><code>{evidence.inputEq}</code><small>{evidence.inputDetail}</small></dd></div><div><dt>MAP</dt><dd><code>{evidence.stepEq}</code><small>{evidence.stepDetail}</small></dd></div><div><dt>OUT</dt><dd><code>{evidence.outputEq}</code><small>{evidence.outputDetail}</small></dd></div></dl></>}</article>; })}</div></div>
@@ -596,7 +606,7 @@ export function TrackerPage({ view = 'home' }: { view?: TrackerView }) {
             <tbody>{displayedTools.map((tool) => {
               const evidence = capabilityEvidence[tool.name] ?? [];
               const detail = capabilityDetailFor(tool);
-              return <tr id={toolId(tool.name)} className={highlightedTool === tool.name ? 'tool-highlighted' : ''} key={`${tool.stage}-${tool.name}`}><td><span className="table-stage">{tool.stage}</span><a href={tool.href} target="_blank" rel="noreferrer">{tool.name} ↗</a></td><td className="mono capability-date">{detail.date}</td><td><p className="capability-summary">{tool.capability}</p><dl className="capability-interface"><div><dt>IN</dt><dd>{detail.input}</dd></div><div><dt>ARCH</dt><dd>{detail.architecture}</dd></div><div><dt>OUT</dt><dd>{detail.output}</dd></div></dl></td><td className="metric"><strong>{tool.metric}</strong><dl className="capability-cost"><div><dt>TRAIN</dt><dd>{detail.trainCost}</dd></div><div><dt>INFER</dt><dd>{detail.inferCost}</dd></div></dl></td><td>{tool.open}</td><td>{tool.api}</td><td><span>{tool.local}</span><dl className="capability-compute"><div><dt>COMPUTE</dt><dd>{detail.compute}</dd></div></dl></td><td className="usage-cell">{evidence.length ? evidence.map((item) => <a className={`evidence-${item.relation}`} href={item.href} target="_blank" rel="noreferrer" key={`${item.work}-${item.relation}`}><small>{item.relation}</small>{item.work} ↗</a>) : <span>Not yet traced to a verified downstream implementation</span>}</td></tr>;
+              return <tr id={toolId(tool.name)} className={highlightedTool === tool.name ? 'tool-highlighted' : ''} key={`${tool.stage}-${tool.name}`}><td><span className="table-stage">{tool.stage}</span><a href={tool.href} target="_blank" rel="noreferrer">{tool.name} ↗</a></td><td className="mono capability-date">{detail.date}</td><td><p className="entry-takeaway capability-takeaway"><small>TAKEAWAY</small><span>{tool.takeaway}</span></p><p className="capability-summary">{tool.capability}</p><dl className="capability-interface"><div><dt>IN</dt><dd>{detail.input}</dd></div><div><dt>ARCH</dt><dd>{detail.architecture}</dd></div><div><dt>OUT</dt><dd>{detail.output}</dd></div></dl></td><td className="metric"><strong>{tool.metric}</strong><dl className="capability-cost"><div><dt>TRAIN</dt><dd>{detail.trainCost}</dd></div><div><dt>INFER</dt><dd>{detail.inferCost}</dd></div></dl></td><td>{tool.open}</td><td>{tool.api}</td><td><span>{tool.local}</span><dl className="capability-compute"><div><dt>COMPUTE</dt><dd>{detail.compute}</dd></div></dl></td><td className="usage-cell">{evidence.length ? evidence.map((item) => <a className={`evidence-${item.relation}`} href={item.href} target="_blank" rel="noreferrer" key={`${item.work}-${item.relation}`}><small>{item.relation}</small>{item.work} ↗</a>) : <span>Not yet traced to a verified downstream implementation</span>}</td></tr>;
             })}</tbody>
           </table>
         </div>

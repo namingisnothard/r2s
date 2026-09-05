@@ -6,6 +6,7 @@ export type PipelineInstitution = {
 // Concise author-affiliation rollups from official project pages, paper front
 // matter, or publisher records. Missing records deliberately remain unresolved.
 export const pipelineInstitutions: Record<string, PipelineInstitution> = {
+  'AdaRoboVLG':{ label:'HUST · Peking University · BIGAI · KEENON Robotics · ByteDance · collaborators', verified:true },
   'SPARK':{ label:'UCLA · USC · University of Utah', verified:true },
   'SoMA':{ label:'CUHK · Shanghai AI Laboratory', verified:true },
   'MicroDuck':{ label:'Pollen Robotics', verified:true },
