@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 type SiteHeaderProps = {
+  contents?: Array<[string, string]>;
   language?: 'en' | 'zh';
   active?: 'foundations' | 'evolution' | 'breakdown' | 'pipelines' | 'capabilities' | 'simulation' | 'hardware' | 'research-lineages';
 };
@@ -23,7 +24,7 @@ const navigationZh: Record<string, string> = {
   'Composable grasping': '可组合抓取', 'Progress chronology': '进展编年史', 'Open frontier': '待解问题',
 };
 
-export function SiteHeader({ active, language = 'en' }: SiteHeaderProps) {
+export function SiteHeader({ active, language = 'en', contents }: SiteHeaderProps) {
   const label = (text: string) => language === 'zh' ? navigationZh[text] ?? text : text;
   return (
     <><header className="site-header">
@@ -38,7 +39,7 @@ export function SiteHeader({ active, language = 'en' }: SiteHeaderProps) {
         <Link className={`nav-featured${active === 'hardware' ? ' active' : ''}`} href="/hardware/" aria-current={active === 'hardware' ? 'page' : undefined}>{label('Hardware')}</Link>
         <Link className={`nav-featured${active === 'research-lineages' ? ' active' : ''}`} href="/research-lineages/" aria-current={active === 'research-lineages' ? 'page' : undefined}>{label('Research progress')}</Link>
       </nav>
-    </header>{active && <aside className="edge-contents" aria-label={language === 'zh' ? '目录' : 'Contents'}><span>{language === 'zh' ? '目录' : 'CONTENTS'}</span><nav>{subpageContents[active].map(([text, href], index) => <a href={href} key={href}><small>{String(index + 1).padStart(2,'0')}</small>{label(text)}</a>)}</nav></aside>}</>
+    </header>{active && <aside className="edge-contents" aria-label={language === 'zh' ? '目录' : 'Contents'}><span>{language === 'zh' ? '目录' : 'CONTENTS'}</span><nav>{(contents ?? subpageContents[active]).map(([text, href], index) => <a href={href} key={href}><small>{String(index + 1).padStart(2,'0')}</small>{label(text)}</a>)}</nav></aside>}</>
   );
 }
 

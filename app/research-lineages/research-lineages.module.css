@@ -188,3 +188,10 @@
   .compact .familyHeading h3 { font-size: 19px; }
   .compact .spine { gap: 4px 24px; }
 }
+
+/* Keep the tree close to its controls without changing the editorial view. */
+.treeView .hero { min-height: auto; padding-top: 46px; padding-bottom: 40px; }
+.treeView .hero h1 { font-size: clamp(38px, 4.5vw, 70px); }
+@media (max-width: 700px) {
+  .page section[id], .page article[id] { scroll-margin-top: 204px; }
+}

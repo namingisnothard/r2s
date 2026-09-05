@@ -2,10 +2,15 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { SiteFooter, SiteHeader } from '../site-chrome';
 import { composableGrasping, researchLineages, type LineagePaper } from '../research-lineages-data';
 import { copy, criteria, localizedResearch, type Language } from './translations';
 import styles from './research-lineages.module.css';
+import DecisionTree from './decision-tree';
+import { researchTree } from './decision-tree-data';
+
+const TreeLandscape = dynamic(() => import('./tree-landscape'), { ssr: false });
 
 const allPapers = [...researchLineages.flatMap(family => family.papers), composableGrasping];
 const paperByName = new Map(allPapers.map(paper => [paper.name, paper]));
@@ -41,7 +46,10 @@ export default function ResearchReader() {
   const search = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const params = new URLSearchParams(search);
   const language: Language = params.get('lang') === 'zh' ? 'zh' : 'en';
-  const format = params.get('format') === 'compact' ? 'compact' : 'editorial';
+  const format = params.get('format') === '3d' ? '3d' : params.get('format') === 'tree' ? 'tree' : params.get('format') === 'compact' ? 'compact' : 'editorial';
+  const tree = format === 'tree';
+  const landscape = format === '3d';
+  const mapView = tree || landscape;
   const compact = format === 'compact';
   const t = copy[language];
   const { families, grasping, milestones } = localizedResearch(language);
@@ -57,7 +65,7 @@ export default function ResearchReader() {
     };
   }, [language]);
 
-  function updatePreference(key: 'lang' | 'format', value: string) {
+  function updatePreference(key: 'lang' | 'format' | 'paper', value: string) {
     const url = new URL(window.location.href);
     url.searchParams.set(key, value);
     if (url.search === window.location.search) return;
@@ -65,13 +73,19 @@ export default function ResearchReader() {
     window.dispatchEvent(new Event(preferencesEvent));
   }
 
-  return <main id="top" className={`${styles.page} ${compact ? styles.compact : ''}`} lang={language === 'zh' ? 'zh-CN' : 'en'}>
-    <SiteHeader active="research-lineages" language={language} />
+  return <main id="top" className={`${styles.page} ${compact ? styles.compact : ''} ${mapView ? styles.treeView : ''}`} lang={language === 'zh' ? 'zh-CN' : 'en'}>
+    <SiteHeader active="research-lineages" language={language} contents={landscape ? [['Overview', '#top'], [t.landscape, '#families'], ['Progress chronology', '#chronology'], ['Open frontier', '#open-frontier']] : tree ? [
+      ['Overview', '#top'], [t.tree, '#families'],
+      ...researchTree.children.flatMap(node => node.kind === 'decision' ? [[node.answer[language], `#tree-${node.id}`] as [string, string]] : []),
+      ['Progress chronology', '#chronology'], ['Open frontier', '#open-frontier'],
+    ] : undefined} />
     <div className={styles.controls}>
       <div className={styles.controlGroup} role="group" aria-label={t.format}>
         <span>{t.format}</span>
-        <button type="button" aria-pressed={!compact} onClick={() => updatePreference('format', 'editorial')}>{t.editorial}</button>
+        <button type="button" aria-pressed={format === 'editorial'} onClick={() => updatePreference('format', 'editorial')}>{t.editorial}</button>
         <button type="button" aria-pressed={compact} onClick={() => updatePreference('format', 'compact')}>{t.compact}</button>
+        <button type="button" aria-pressed={tree} onClick={() => updatePreference('format', 'tree')}>{t.tree}</button>
+        <button type="button" aria-pressed={landscape} onClick={() => updatePreference('format', '3d')}>{t.landscape}</button>
       </div>
       <div className={styles.controlGroup} role="group" aria-label={t.language}>
         <span>{t.language}</span>
@@ -84,8 +98,8 @@ export default function ResearchReader() {
       <div><p className="eyebrow">{t.eyebrow}</p><h1>{t.title} <em>{t.titleEmphasis}</em></h1></div>
       <div className="subpage-intro">
         <p>{t.intro}</p>
-        <div><span>{families.length} {t.familiesCount}</span><span>{allPapers.length} {t.papersCount}</span><span>{t.dateBasis}</span></div>
-        <nav className="foundation-hero-links" aria-label={t.explore}><a className="button primary" href="#families">{t.compare}</a><a className="button secondary" href="#chronology">{t.readChronology}</a></nav>
+        <div><span>{mapView ? researchTree.children.length : families.length} {mapView ? t.outputsCount : t.familiesCount}</span><span>{allPapers.length} {t.papersCount}</span><span>{t.dateBasis}</span></div>
+        <nav className="foundation-hero-links" aria-label={t.explore}><a className="button primary" href="#families">{landscape ? t.exploreLandscape : tree ? t.exploreTree : t.compare}</a><a className="button secondary" href="#chronology">{t.readChronology}</a></nav>
       </div>
     </section>
 
@@ -95,7 +109,7 @@ export default function ResearchReader() {
       <div className={styles.method}><strong>{t.scopeTitle}</strong><p>{t.scope}</p></div>
     </section>
 
-    <section className={styles.section} id="families">
+    {landscape ? <TreeLandscape language={language} selectedPaper={params.get('paper') ?? ''} onSelect={id => updatePreference('paper', id)} /> : tree ? <DecisionTree language={language} selectedPaper={params.get('paper') ?? ''} onSelect={id => updatePreference('paper', id)} /> : <section className={styles.section} id="families">
       <div className={styles.heading}><div><p className="eyebrow">{t.familiesEyebrow}</p><h2>{t.familiesTitle}{' '}<br />{t.familiesSubtitle}</h2></div><p>{t.familiesIntro}</p></div>
       <nav className={styles.familyNav} aria-label={t.familyNav}>{families.map((family, index) => <a href={`#${family.id}`} key={family.id}><span>0{index + 1}</span>{family.title}<b aria-hidden="true">↘</b></a>)}</nav>
       {families.map((family, index) => <article className={styles.family} id={family.id} key={family.id}>
@@ -121,12 +135,12 @@ export default function ResearchReader() {
         </div>}
         <div className={styles.takeaway}><span>{t.takeaway}</span><p>{family.takeaway}</p></div>
       </article>)}
-    </section>
+    </section>}
 
-    <section className={`${styles.section} ${styles.adjacent}`} id="composable-grasping">
+    {!mapView && <section className={`${styles.section} ${styles.adjacent}`} id="composable-grasping">
       <div><p className="eyebrow">{t.adjacentEyebrow} · {grasping.date}</p><h2>{t.adjacentTitle}{' '}<br />{t.adjacentSubtitle}</h2><h3>AdaRoboVLG</h3><PaperLinks paper={grasping} language={language} /></div>
       <div><p>{grasping.advance}</p><blockquote>{t.adjacentNote}</blockquote></div>
-    </section>
+    </section>}
 
     <section className={`${styles.section} ${styles.chronology}`} id="chronology">
       <div className={styles.heading}><div><p className="eyebrow">{t.chronologyEyebrow}</p><h2>{t.chronologyTitle}{' '}<br /><em>{t.chronologyEmphasis}</em></h2></div><p>{t.chronologyIntro}</p></div>
