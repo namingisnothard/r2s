@@ -17,6 +17,7 @@ export type Pipeline = {
   summary: string;
   metric: string;
   stages: Stage[];
+  topics?: ('Inverse rendering' | 'Relighting' | 'Physical simulation')[];
   open: 'Open' | 'Partial' | 'Paper only';
   paper: string;
   code?: string;
